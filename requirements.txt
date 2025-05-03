@@ -1,5 +1,4 @@
 Flask
-undetected-chromedriver
 selenium
+undetected-chromedriver
 requests
-rarfiles
