@@ -9,7 +9,6 @@ RUN apt-get update && apt-get install -y \
     gnupg \
     ca-certificates \
     fonts-liberation \
-    libappindicator1 \
     libasound2 \
     libatk-bridge2.0-0 \
     libatk1.0-0 \
@@ -46,6 +45,7 @@ RUN apt-get update && apt-get install -y \
     xvfb \
     libu2f-udev \
     libvulkan1 \
+    libpangocairo-1.0-0 \
     --no-install-recommends && \
     rm -rf /var/lib/apt/lists/*
 
