@@ -40,10 +40,7 @@ RUN apt-get update && apt-get install -y \
     libxss1 \
     libxtst6 \
     libgbm-dev \
-    libindicator7 \
     libappindicator3-1 \
-    libprotobuf8 \
-    libqtmultimediakit1 \
     libxcb1 \
     libxkbcommon0 \
     xdg-utils \
