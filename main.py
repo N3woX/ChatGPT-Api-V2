@@ -15,8 +15,7 @@ import shutil
 import threading
 
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
-# Initialize Flask app here, so it's available for Gunicorn
-app = Flask(__name__) # <-- Keep this line here
+app = Flask(__name__)
 
 driver = None
 prompt_box = None
@@ -35,11 +34,9 @@ else:
     PLACEHOLDER_URL = "http://example.com"
 
 def keep_alive():
-    # Fix the 'latin-1' codec error here: remove non-ASCII characters from User-Agent
-    # The 'حدی' part in your original User-Agent is causing the issue.
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7", # Cleaned up 'حدیq=0.8'
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
         "Accept-Language": "en-US,en;q=0.9",
         "Connection": "keep-alive",
         "Upgrade-Insecure-Requests": "1",
@@ -100,15 +97,16 @@ def setup_driver():
 
     chrome_url = "https://storage.googleapis.com/chrome-for-testing-public/137.0.7151.6/win64/chrome-win64.zip"
 
-    # IMPORTANT: Change win64 to linux64 for Render (Linux OS)
     chrome_url = chrome_url.replace("win64", "linux64")
 
     chrome_extract_dir = "./chrome_bin"
-    chrome_subfolder = "chrome-linux64" # Changed from chrome-win64
-    chrome_exe_name = "chrome" # Changed from chrome.exe (no .exe on Linux)
+    chrome_subfolder = "chrome-linux64"
+    chrome_exe_name = "chrome"
 
     chrome_binary_path = download_and_extract_zip(chrome_url, chrome_extract_dir, chrome_subfolder, chrome_exe_name)
 
+    os.chmod(chrome_binary_path, 0o755)
+    logging.info(f"Set executable permissions for {chrome_binary_path}")
 
     options = uc.ChromeOptions()
     options.add_argument("--disable-blink-features=AutomationControlled")
@@ -278,33 +276,19 @@ def ask():
     logging.info("Returning response.")
     return jsonify({"response": response_text})
 
-# --- MOVED INITIALIZATION HERE ---
-# This code runs as soon as the 'main' module is imported by Gunicorn
 logging.info("Starting script (Gunicorn import mode).")
 try:
     setup_driver()
     logging.info("Driver setup complete.")
     keep_alive_thread = threading.Thread(target=keep_alive)
-    keep_alive_thread.daemon = True # Allows thread to exit when main program exits
+    keep_alive_thread.daemon = True
     keep_alive_thread.start()
     logging.info("Keep-alive thread started.")
 except Exception as e:
     logging.critical(f"Initial setup (driver or keep-alive) failed during Gunicorn import: {e}")
-    # Depending on how critical this is, you might want to force the process to exit
-    # import sys
-    # sys.exit(1)
-# --- END MOVED INITIALIZATION ---
-
 
 if __name__ == "__main__":
-    # This block only runs when you execute `python main.py` directly, not with Gunicorn.
     logging.info("Starting script in local development mode (if this log appears, you're running directly).")
-    # The keep-alive and driver setup would already be done above this block if run directly.
-    # To avoid double initialization if `python main.py` is called:
-    # If setup_driver() or keep_alive_thread() are not globally managed or idempotent,
-    # you might need a flag here to prevent re-running them.
-    # For now, as they are at the top-level now, calling them here would be redundant.
-
     port = int(os.environ.get("PORT", 5000))
     logging.info(f"Starting Flask app on port {port}.")
     app.run(debug=True, host="0.0.0.0", port=port, use_reloader=False)
