@@ -5,12 +5,12 @@ set -e
 
 echo "--- Updating apt package list ---"
 # Update the package list to ensure we can find the latest versions of packages
-sudo apt-get update -y
+apt-get update -y # Removed 'sudo'
 
 echo "--- Installing Chrome/Chromium system dependencies ---"
 # Install all necessary system libraries for headless Chrome to run
 # This is a comprehensive list to cover most scenarios.
-sudo apt-get install -y \
+apt-get install -y \ # Removed 'sudo'
     wget \
     gnupg \
     ca-certificates \
@@ -56,7 +56,7 @@ sudo apt-get install -y \
 
 echo "--- Cleaning up apt cache ---"
 # Clean up the apt cache to save disk space on the Render instance
-sudo rm -rf /var/lib/apt/lists/*
+rm -rf /var/lib/apt/lists/* # Removed 'sudo'
 
 echo "--- Installing Python dependencies ---"
 # Install your Python packages listed in requirements.txt
