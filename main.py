@@ -13,6 +13,7 @@ import zipfile
 import io
 import shutil
 import threading
+import base64 # Added for screenshot encoding
 
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
 app = Flask(__name__)
@@ -92,6 +93,21 @@ def download_and_extract_zip(url, extract_to_dir, subfolder_name, exe_name):
         logging.critical(f"An unexpected error occurred during download/extraction: {e}")
         raise
 
+# Global counter for screenshots
+screenshot_counter = 0
+def take_and_log_screenshot(driver_instance, step_name):
+    global screenshot_counter
+    if driver_instance:
+        try:
+            screenshot_data = driver_instance.get_screenshot_as_base64()
+            screenshot_counter += 1
+            logging.info(f"SCREENSHOT_DEBUG_{screenshot_counter}_{step_name}: {screenshot_data}")
+        except Exception as e:
+            logging.error(f"Failed to take screenshot at {step_name}: {e}")
+    else:
+        logging.warning(f"Cannot take screenshot at {step_name}: driver is None.")
+
+
 def setup_driver():
     global driver, prompt_box, message_count
 
@@ -112,14 +128,21 @@ def setup_driver():
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
+    # Added for debugging: run in non-headless temporarily to see UI if possible (uncomment for local testing)
+    # options.add_argument("--start-maximized")
+    # options.add_argument("--window-size=1920,1080")
+    # options.headless = False # Set to True for Render deployment (or simply don't set this as it defaults to headless)
 
     options.binary_location = chrome_binary_path
 
     driver = uc.Chrome(options=options)
+    take_and_log_screenshot(driver, "After_Driver_Init")
 
     logging.info(f"Chrome binary path set to: {chrome_binary_path}")
 
     driver.get("https://chatgpt.com/")
+    take_and_log_screenshot(driver, "After_ChatGPT_Load")
+
 
     time.sleep(5)
 
@@ -128,8 +151,10 @@ def setup_driver():
             EC.presence_of_element_located((By.ID, "prompt-textarea"))
         )
         logging.info("Prompt box found.")
+        take_and_log_screenshot(driver, "Prompt_Box_Found")
     except Exception as e:
         logging.error(f"Failed to find prompt box: {e}")
+        take_and_log_screenshot(driver, "Prompt_Box_FAIL")
         driver.quit()
         raise
 
@@ -171,13 +196,16 @@ def wait_for_stable_response(initial_count, timeout=30, poll_interval=0.3, stabi
 
             if current_text and len(current_text) < 50 and stable_count >= 1:
                 logging.debug(f"Short stable response detected. Returning: {current_text}")
+                take_and_log_screenshot(driver, f"Stable_Response_Short_{stable_count}")
                 return current_text
             if stable_count >= stability_cycles and current_text:
                 logging.debug(f"Response stable for {stability_cycles} cycles. Returning: {current_text}")
+                take_and_log_screenshot(driver, f"Stable_Response_Long_{stable_count}")
                 return current_text
 
             if time.time() - start_time > timeout:
                 logging.warning(f"Timeout reached ({timeout}s). Returning current text: {current_text}")
+                take_and_log_screenshot(driver, "Response_Timeout")
                 return current_text
 
             last_text = current_text
@@ -185,6 +213,7 @@ def wait_for_stable_response(initial_count, timeout=30, poll_interval=0.3, stabi
 
         except Exception as e:
             logging.error(f"Error in wait_for_stable_response loop: {e}")
+            take_and_log_screenshot(driver, "Wait_Loop_Error")
             return current_text
 
 def process_message(message):
@@ -204,33 +233,40 @@ def process_message(message):
         dismiss_button.click()
         time.sleep(1)
         logging.info("Dismiss button clicked.")
+        take_and_log_screenshot(driver, "Dismiss_Button_Clicked")
     except (TimeoutException, NoSuchElementException):
         logging.debug("Dismiss button not found or not clickable within timeout (expected behavior if prompt is not shown).")
         pass
     except Exception as e:
         logging.error(f"An unexpected error occurred while checking for dismiss button: {e}")
+        take_and_log_screenshot(driver, "Dismiss_Button_Error")
 
     try:
         prompt_box = WebDriverWait(driver, 10).until(
             EC.element_to_be_clickable((By.ID, "prompt-textarea"))
         )
         logging.debug("Prompt box is clickable.")
+        take_and_log_screenshot(driver, "Prompt_Box_Clickable")
     except Exception as e:
         logging.error(f"Prompt box not clickable or found before sending message: {e}")
         try:
             prompt_box = driver.find_element(By.ID, "prompt-textarea")
             if prompt_box.is_displayed() and prompt_box.is_enabled():
                 logging.debug("Re-found prompt box element and it is interactive.")
+                take_and_log_screenshot(driver, "Prompt_Box_Refound_Interactive")
             else:
                 logging.critical("Re-found prompt box but it is not interactive.")
+                take_and_log_screenshot(driver, "Prompt_Box_Refound_NotInteractive")
                 raise Exception("Prompt box not interactive after re-finding")
         except Exception as ef:
             logging.critical(f"Failed to re-find prompt box: {ef}")
+            take_and_log_screenshot(driver, "Prompt_Box_Refind_Fail")
             raise
 
     initial_paragraphs = driver.find_elements(By.CSS_SELECTOR, "p[data-start]")
     initial_count = len(initial_paragraphs)
     logging.debug(f"Initial paragraph count before sending: {initial_count}")
+    take_and_log_screenshot(driver, "Before_Sending_Message")
 
     prompt_box.clear()
     logging.debug("Prompt box cleared.")
@@ -244,8 +280,10 @@ def process_message(message):
     logging.debug("User message sent to prompt box.")
     prompt_box.send_keys(Keys.RETURN)
     logging.debug("RETURN sent to submit message.")
+    take_and_log_screenshot(driver, "Message_Submitted")
 
     response_text = wait_for_stable_response(initial_count)
+    take_and_log_screenshot(driver, "After_Response_Wait")
 
     logging.info("Response received.")
     return response_text
@@ -271,6 +309,7 @@ def ask():
         response_text = process_message(user_message)
     except Exception as e:
         logging.error(f"Error during message processing: {e}")
+        take_and_log_screenshot(driver, "Message_Processing_Error") # Screenshot on error
         return jsonify({"error": f"Failed to process message: {e}"}), 500
 
     logging.info("Returning response.")
