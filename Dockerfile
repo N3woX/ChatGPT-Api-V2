@@ -5,23 +5,14 @@ ENV PYTHONUNBUFFERED 1 \
     PIP_DISABLE_PIP_VERSION_CHECK 1
 
 # Install essential packages for adding Google Chrome's repository and downloading Chrome
+# and the core dependencies that Google Chrome Stable doesn't implicitly pull
 RUN apt-get update && apt-get install -y \
     wget \
+    curl \
     gnupg \
     ca-certificates \
-    --no-install-recommends && \
-    rm -rf /var/lib/apt/lists/*
-
-# Add Google Chrome's official signing key and repository
-# This ensures that apt can verify and download Google Chrome Stable.
-RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add - && \
-    echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list
-
-# Install Google Chrome Stable and all its recommended dependencies,
-# plus other common dependencies for headless Selenium environments.
-# Combine these installations for efficiency and a smaller image.
-RUN apt-get update && apt-get install -y \
-    google-chrome-stable \
+    xvfb \
+    # Core system libs often needed for headless Chrome, even with google-chrome-stable
     libasound2 \
     libatk-bridge2.0-0 \
     libatk1.0-0 \
@@ -49,12 +40,6 @@ RUN apt-get update && apt-get install -y \
     libxcb1 \
     libxkbcommon0 \
     xdg-utils \
-    fonts-ipafont-gothic \
-    fonts-wqy-zenhei \
-    fonts-thai-tlwg \
-    fonts-kacst \
-    fonts-noto-color-emoji \
-    xvfb \
     libu2f-udev \
     libvulkan1 \
     libpangocairo-1.0-0 \
@@ -62,9 +47,24 @@ RUN apt-get update && apt-get install -y \
     libgbm1 \
     libglvnd0 \
     libxshmfence6 \
+    --no-install-recommends && \
+    rm -rf /var/lib/apt/lists/*
+
+# Add Google Chrome's official signing key and repository using a more modern method
+# This ensures that apt can verify and download Google Chrome Stable reliably.
+RUN curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg && \
+    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list
+
+# Install Google Chrome Stable and fonts (fonts might not be pulled by google-chrome-stable directly)
+RUN apt-get update && apt-get install -y \
+    google-chrome-stable \
+    fonts-ipafont-gothic \
+    fonts-wqy-zenhei \
+    fonts-thai-tlwg \
+    fonts-kacst \
+    fonts-noto-color-emoji \
     fonts-noto \
     fonts-symbola \
-    # Clean up apt caches to minimize image size
     --no-install-recommends && \
     rm -rf /var/lib/apt/lists/*
 
