@@ -12,7 +12,7 @@ import requests
 import zipfile
 import io
 import shutil
-import threading # Import threading
+import threading
 
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s")
 app = Flask(__name__)
@@ -27,13 +27,15 @@ CONTEXT = (
     "Simply await the next user input and respond directly."
 )
 
-# --- New: Placeholder URL for keep-alive requests ---
-PLACEHOLDER_URL = os.environ.get("PLACEHOLDER_URL", "http://example.com") # Use environment variable or default
+render_external_hostname = os.environ.get("RENDER_EXTERNAL_HOSTNAME")
+if render_external_hostname:
+    PLACEHOLDER_URL = f"https://{render_external_hostname}"
+else:
+    PLACEHOLDER_URL = "http://example.com"
 
-# --- New Function: Keep-alive thread logic ---
 def keep_alive():
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36", # Example browser User-Agent
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp, حدیq=0.8,application/signed-exchange;v=b3;q=0.7",
         "Accept-Language": "en-US,en;q=0.9",
         "Connection": "keep-alive",
@@ -42,18 +44,15 @@ def keep_alive():
     while True:
         try:
             logging.info(f"Sending keep-alive request to {PLACEHOLDER_URL}")
-            response = requests.get(PLACEHOLDER_URL, headers=headers, timeout=10) # Added timeout
+            response = requests.get(PLACEHOLDER_URL, headers=headers, timeout=10)
             logging.info(f"Keep-alive request status: {response.status_code}")
-            response.close() # Ensure connection is closed
+            response.close()
         except requests.exceptions.RequestException as e:
             logging.error(f"Error sending keep-alive request to {PLACEHOLDER_URL}: {e}")
         except Exception as e:
             logging.error(f"An unexpected error occurred in keep-alive thread: {e}")
 
-        time.sleep(60) # Wait for 60 seconds
-
-# --- End New Function ---
-
+        time.sleep(60)
 
 def download_and_extract_zip(url, extract_to_dir, subfolder_name, exe_name):
     logging.info(f"Downloading {url}...")
@@ -76,7 +75,7 @@ def download_and_extract_zip(url, extract_to_dir, subfolder_name, exe_name):
             logging.critical(f"Executable not found at expected path after extraction: {exe_path}")
             logging.debug(f"Contents of {extract_to_dir}: {os.listdir(extract_to_dir)}")
             if os.path.exists(os.path.join(extract_to_dir, subfolder_name)):
-                 logging.debug(f"Contents of {os.path.join(extract_to_dir, subfolder_name)}: {os.listdir(os.path.join(extract_to_dir, subfolder_name))}")
+                logging.debug(f"Contents of {os.path.join(extract_to_dir, subfolder_name)}: {os.listdir(os.path.join(extract_to_dir, subfolder_name))}")
 
             raise FileNotFoundError(f"Executable not found at {exe_path}")
 
@@ -97,7 +96,6 @@ def setup_driver():
     global driver, prompt_box, message_count
 
     chrome_url = "https://storage.googleapis.com/chrome-for-testing-public/137.0.7151.6/win64/chrome-win64.zip"
-    # chromedriver_url = "https://github.com/dreamshao/chromedriver/raw/refs/heads/main/135.0.7049.42%20chromedriver-win64.zip"
 
     chrome_extract_dir = "./chrome_bin"
     chrome_subfolder = "chrome-win64"
@@ -106,6 +104,8 @@ def setup_driver():
 
     options = uc.ChromeOptions()
     options.add_argument("--disable-blink-features=AutomationControlled")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
 
     options.binary_location = chrome_binary_path
 
@@ -140,15 +140,15 @@ def wait_for_stable_response(initial_count, timeout=30, poll_interval=0.3, stabi
             new_paragraphs = paragraphs[initial_count:] if len(paragraphs) > initial_count else []
             texts = []
             for p in new_paragraphs:
-                 if p.is_displayed():
+                if p.is_displayed():
                     try:
                         texts.append(p.text)
                     except StaleElementReferenceException:
-                         logging.debug("Caught StaleElementReferenceException while getting text. Retrying...")
-                         paragraphs = driver.find_elements(By.CSS_SELECTOR, "p[data-start]")
-                         new_paragraphs = paragraphs[initial_count:] if len(paragraphs) > initial_count else []
-                         texts = [p.text for p in new_paragraphs if p.is_displayed()]
-                         break
+                        logging.debug("Caught StaleElementReferenceException while getting text. Retrying...")
+                        paragraphs = driver.find_elements(By.CSS_SELECTOR, "p[data-start]")
+                        new_paragraphs = paragraphs[initial_count:] if len(paragraphs) > initial_count else []
+                        texts = [p.text for p in new_paragraphs if p.is_displayed()]
+                        break
 
             current_text = "\n".join(texts)
 
@@ -167,8 +167,8 @@ def wait_for_stable_response(initial_count, timeout=30, poll_interval=0.3, stabi
                 logging.debug(f"Short stable response detected. Returning: {current_text}")
                 return current_text
             if stable_count >= stability_cycles and current_text:
-                 logging.debug(f"Response stable for {stability_cycles} cycles. Returning: {current_text}")
-                 return current_text
+                logging.debug(f"Response stable for {stability_cycles} cycles. Returning: {current_text}")
+                return current_text
 
             if time.time() - start_time > timeout:
                 logging.warning(f"Timeout reached ({timeout}s). Returning current text: {current_text}")
@@ -206,21 +206,21 @@ def process_message(message):
 
     try:
         prompt_box = WebDriverWait(driver, 10).until(
-             EC.element_to_be_clickable((By.ID, "prompt-textarea"))
+            EC.element_to_be_clickable((By.ID, "prompt-textarea"))
         )
         logging.debug("Prompt box is clickable.")
     except Exception as e:
-         logging.error(f"Prompt box not clickable or found before sending message: {e}")
-         try:
-              prompt_box = driver.find_element(By.ID, "prompt-textarea")
-              if prompt_box.is_displayed() and prompt_box.is_enabled():
-                   logging.debug("Re-found prompt box element and it is interactive.")
-              else:
-                   logging.critical("Re-found prompt box but it is not interactive.")
-                   raise Exception("Prompt box not interactive after re-finding")
-         except Exception as ef:
-              logging.critical(f"Failed to re-find prompt box: {ef}")
-              raise
+        logging.error(f"Prompt box not clickable or found before sending message: {e}")
+        try:
+            prompt_box = driver.find_element(By.ID, "prompt-textarea")
+            if prompt_box.is_displayed() and prompt_box.is_enabled():
+                logging.debug("Re-found prompt box element and it is interactive.")
+            else:
+                logging.critical("Re-found prompt box but it is not interactive.")
+                raise Exception("Prompt box not interactive after re-finding")
+        except Exception as ef:
+            logging.critical(f"Failed to re-find prompt box: {ef}")
+            raise
 
     initial_paragraphs = driver.find_elements(By.CSS_SELECTOR, "p[data-start]")
     initial_count = len(initial_paragraphs)
@@ -273,12 +273,10 @@ def ask():
 
 if __name__ == "__main__":
     logging.info("Starting script.")
-    # --- New: Start the keep-alive thread ---
     keep_alive_thread = threading.Thread(target=keep_alive)
-    keep_alive_thread.daemon = True # Allow the main program to exit even if this thread is running
+    keep_alive_thread.daemon = True
     keep_alive_thread.start()
     logging.info("Keep-alive thread started.")
-    # --- End New ---
     try:
         setup_driver()
         logging.info("Driver setup complete.")
