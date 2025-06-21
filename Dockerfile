@@ -4,11 +4,24 @@ ENV PYTHONUNBUFFERED 1 \
     PIP_NO_CACHE_DIR 1 \
     PIP_DISABLE_PIP_VERSION_CHECK 1
 
+# Install essential packages for adding Google Chrome's repository and downloading Chrome
 RUN apt-get update && apt-get install -y \
     wget \
     gnupg \
     ca-certificates \
-    fonts-liberation \
+    --no-install-recommends && \
+    rm -rf /var/lib/apt/lists/*
+
+# Add Google Chrome's official signing key and repository
+# This ensures that apt can verify and download Google Chrome Stable.
+RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add - && \
+    echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list
+
+# Install Google Chrome Stable and all its recommended dependencies,
+# plus other common dependencies for headless Selenium environments.
+# Combine these installations for efficiency and a smaller image.
+RUN apt-get update && apt-get install -y \
+    google-chrome-stable \
     libasound2 \
     libatk-bridge2.0-0 \
     libatk1.0-0 \
@@ -31,7 +44,6 @@ RUN apt-get update && apt-get install -y \
     libxrandr2 \
     libxrender1 \
     libxss1 \
-    libxtst6 \
     libgbm-dev \
     libappindicator3-1 \
     libxcb1 \
@@ -46,6 +58,13 @@ RUN apt-get update && apt-get install -y \
     libu2f-udev \
     libvulkan1 \
     libpangocairo-1.0-0 \
+    libegl1 \
+    libgbm1 \
+    libglvnd0 \
+    libxshmfence6 \
+    fonts-noto \
+    fonts-symbola \
+    # Clean up apt caches to minimize image size
     --no-install-recommends && \
     rm -rf /var/lib/apt/lists/*
 
